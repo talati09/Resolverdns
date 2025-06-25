@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/dns_resolver.dir/src/main.cpp.o CMakeFiles/dns_resolver.dir/src/dns_resolver.cpp.o CMakeFiles/dns_resolver.dir/src/parser.cpp.o CMakeFiles/dns_resolver.dir/src/utils.cpp.o CMakeFiles/dns_resolver.dir/src/cache.cpp.o -o dns_resolver 

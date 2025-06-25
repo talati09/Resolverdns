@@ -1,0 +1,4 @@
+google.com
+openai.com
+github.com
+iiita.ac.in

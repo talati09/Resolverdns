@@ -1,0 +1,28 @@
+cmake_minimum_required(VERSION 3.10)
+project(dns_resolver_project)
+
+set(CMAKE_CXX_STANDARD 17)
+
+# Include directories
+include_directories(
+    src/headers
+    src/external       # For nlohmann/json.hpp
+)
+
+# DNS Resolver main executable
+add_executable(dns_resolver
+    src/main.cpp
+    src/dns_resolver.cpp
+    src/parser.cpp
+    src/utils.cpp
+    src/cache.cpp
+)
+
+# Test runner executable (if needed)
+add_executable(test_runner
+    src/test/test_runner.cpp
+    src/dns_resolver.cpp
+    src/parser.cpp
+    src/utils.cpp
+    src/cache.cpp
+)

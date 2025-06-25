@@ -1,0 +1,4 @@
+/mnt/e/projectdns/build/CMakeFiles/dns_resolver.dir
+/mnt/e/projectdns/build/CMakeFiles/test_runner.dir
+/mnt/e/projectdns/build/CMakeFiles/edit_cache.dir
+/mnt/e/projectdns/build/CMakeFiles/rebuild_cache.dir
