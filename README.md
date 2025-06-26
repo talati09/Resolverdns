@@ -22,10 +22,13 @@ A simple C++ DNS resolver that sends raw DNS queries to a public DNS server (lik
 1. **Clone the repository:**
     ```sh
     git clone https://github.com/talati09/Resolverdns.git
-    cd your-repo-name
+    cd Resolverdns
     ```
+2. **Install the JSON library (if needed):**
+   - Option 1: Use system package manager (e.g., `apt install nlohmann-json-dev`)
+   - Option 2: Use CMake's `FetchContent` in the project (already supported)
 
-2. **Build with CMake:**
+3. **Build with CMake:**
     ```sh
     mkdir build
     cd build
@@ -33,7 +36,7 @@ A simple C++ DNS resolver that sends raw DNS queries to a public DNS server (lik
     make
     ```
 
-3. **Run the resolver:**
+4. **Run the resolver:**
     ```sh
     ./dns_resolver
     ```
