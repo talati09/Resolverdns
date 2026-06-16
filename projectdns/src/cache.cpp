@@ -1,22 +1,30 @@
+// cache.cpp
 #include "../headers/cache.h"
+#include "../external/nlohmann/json.hpp"
 #include <fstream>
 #include <iostream>
-#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
-DNSCache::DNSCache(const std::string& filename) : cacheFilePath(filename) {}
+DNSCache::DNSCache(const std::string& filepath) : filepath(filepath) {}
 
 void DNSCache::load() {
-    std::cout << "Trying to open cache file: " << cacheFilePath << std::endl; // Add this line
-    std::ifstream infile(cacheFilePath);
-
+    std::ifstream infile(filepath);
     if (!infile.is_open()) {
-        std::cerr << "❌ Could not open cache file for reading.\n";
+        // File doesn't exist yet — that's fine, first run
         return;
     }
 
     try {
+        // BUG 7 FIXED: previously jumped straight to parsing
+        // If cache.json was empty, infile >> j would throw and get silently swallowed
+        // Now we check file size first before attempting to parse
+        infile.seekg(0, std::ios::end);
+        if (infile.tellg() == 0) {
+            return; // File is empty — nothing to load, not an error
+        }
+        infile.seekg(0, std::ios::beg);
+
         json j;
         infile >> j;
 
@@ -29,20 +37,19 @@ void DNSCache::load() {
 }
 
 void DNSCache::save() {
-    std::cout << "Trying to write cache file: " << cacheFilePath << std::endl; // Add this line
-    std::ofstream outfile(cacheFilePath);
-
+    std::ofstream outfile(filepath);
     if (!outfile.is_open()) {
-        std::cerr << "❌ Could not open cache file for writing.\n";
+        std::cerr << "❌ Failed to open cache file for writing: " << filepath << std::endl;
         return;
     }
 
-    json j;
-    for (const auto& [domain, ip] : cache) {
-        j[domain] = ip;
-    }
+    json j = cache;
+    outfile << j.dump(4); // pretty print with 4-space indent
+}
 
-    outfile << j.dump(4);
+void DNSCache::insert(const std::string& domain, const std::string& ip) {
+    cache[domain] = ip;
+    save();
 }
 
 bool DNSCache::contains(const std::string& domain) const {
@@ -51,27 +58,6 @@ bool DNSCache::contains(const std::string& domain) const {
 
 std::string DNSCache::get(const std::string& domain) const {
     auto it = cache.find(domain);
-    if (it != cache.end()) {
-        return it->second;
-    }
+    if (it != cache.end()) return it->second;
     return "";
-}
-
-void DNSCache::insert(const std::string& domain, const std::string& ip) {
-    cache[domain] = ip;
-    save();
-}
-
-void DNSCache::update(const std::string& domain, const std::string& ip) {
-    cache[domain] = ip;
-    save();
-}
-
-// ✅ Added aliases to fix build error in main.cpp and test_runner.cpp
-bool DNSCache::isCached(const std::string& domain) const {
-    return contains(domain);
-}
-
-std::string DNSCache::getIP(const std::string& domain) const {
-    return get(domain);
 }
