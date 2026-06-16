@@ -14,7 +14,7 @@ std::string formatIPAddress(const std::vector<uint8_t>& bytes) {
     return oss.str();
 }
 
-// Hex dump of raw bytes, useful for debugging
+// Hex dump of raw bytes — useful for debugging raw DNS packets
 std::string hexDump(const std::vector<uint8_t>& data) {
     std::ostringstream oss;
     for (size_t i = 0; i < data.size(); ++i) {
