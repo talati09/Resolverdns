@@ -1,26 +1,30 @@
+#ifndef DNS_RESOLVER_H
+#define DNS_RESOLVER_H
 #pragma once
 
 #include <string>
 #include <vector>
 #include <cstdint>
-#include <netinet/in.h> // <-- Add this line for sockaddr_in
-
-#include "dns_structs.h"
+#include <netinet/in.h>
 
 class DNSResolver {
 public:
-    DNSResolver(const std::string &hostname);
+    DNSResolver(const std::string& hostname);
+
+    // BUG 2 FIXED: destructor added — socket was opened but never closed (resource leak)
+    ~DNSResolver();
+
     bool sendQuery();
-    bool receiveResponse(std::vector<uint8_t> &responseBuffer);
-    void printRawResponse(const std::vector<uint8_t> &buffer) const;
-    void printDNSHeaderInfo(const std::vector<uint8_t>& buffer) const; // <-- Add this line
-    void printQueryBuffer(const std::vector<uint8_t>& buffer) const; // <-- Add this line
+    bool receiveResponse(std::vector<uint8_t>& responseBuffer);
 
 private:
-    void setupSocket();
-    std::vector<uint8_t> buildQuery(const std::string &hostname);
-
     std::string hostname;
-    int sockfd;
+    int sockfd = -1;
     struct sockaddr_in server_addr;
+    std::vector<uint8_t> queryBuffer;
+
+    void setupSocket();
+    void buildQuery();
 };
+
+#endif // DNS_RESOLVER_H
