@@ -1,3 +1,4 @@
+// test_runner.cpp
 #include "../headers/dns_resolver.h"
 #include "../headers/parser.h"
 #include "../headers/cache.h"
@@ -14,8 +15,8 @@ int main() {
         return 1;
     }
 
-    DNSCache cache("src/data/cache.json"); // Adjust path as per project layout
-    cache.load(); // Load existing cache
+    DNSCache cache("../src/data/cache.json");
+    cache.load();
 
     std::string domain;
     while (std::getline(infile, domain)) {
@@ -23,13 +24,11 @@ int main() {
 
         std::cout << "\n🔍 Resolving: " << domain << std::endl;
 
-        // Check cache first
-        if (cache.isCached(domain)) {
-            std::cout << "✅ Cached IP: " << cache.getIP(domain) << std::endl;
+        if (cache.contains(domain)) {
+            std::cout << "✅ Cached IP: " << cache.get(domain) << std::endl;
             continue;
         }
 
-        // Perform DNS resolution
         DNSResolver resolver(domain);
         if (!resolver.sendQuery()) {
             std::cerr << "❌ Failed to send query for " << domain << std::endl;
@@ -42,19 +41,19 @@ int main() {
             continue;
         }
 
-        // Parse the response
-        std::vector<std::string> ipAddresses = DNSParser::parseResponse(responseBuffer);
+        // BONUS FIX: was DNSParser::parseResponse(responseBuffer) — static call
+        // parseResponse is no longer static (Bug 3 fix), must use an object
+        DNSParser parser;
+        std::vector<std::string> ipAddresses = parser.parseResponse(responseBuffer);
+
         if (!ipAddresses.empty()) {
             std::cout << "🌐 Resolved IPs:\n";
             for (const std::string& ip : ipAddresses) {
-                std::cout << " - " << ip << std::endl;
+                std::cout << "   → " << ip << std::endl;
             }
-
-            // Cache the first IP
             cache.insert(domain, ipAddresses[0]);
-            cache.save();
         } else {
-            std::cerr << "⚠️ No IP addresses found in response for " << domain << std::endl;
+            std::cerr << "⚠️  No IPs found for " << domain << std::endl;
         }
     }
 
