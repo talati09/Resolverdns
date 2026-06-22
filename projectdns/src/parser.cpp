@@ -4,7 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include <cstring>
-#include <arpa/inet.h>  
+#include <arpa/inet.h>  // needed for ntohs() / ntohl() — converts network byte order to host byte order
 
 // ─────────────────────────────────────────────
 // readUint16 — reads 2 bytes big-endian from buffer at offset, advances offset
@@ -97,18 +97,24 @@ std::string DNSParser::readName(const std::vector<uint8_t>& buffer, size_t& offs
 }
 
 // ─────────────────────────────────────────────
-// parseResponse — parses a raw DNS response buffer and returns all A record IPs
+// parseResponse — parses a raw DNS response and returns a ParsedResponse
+// containing Answer, Authority (NS), and Additional (glue) sections.
 //
-// BUG 3 FIXED: this was declared 'static' in the header but created a DNSParser
-// object internally to call non-static methods — a contradiction.
-// 'static' has been removed from the declaration in parser.h
+// PHASE 2 CHANGE:
+//   - Now reads all 3 record sections, not just Answer
+//   - Handles A (type 1), NS (type 2), and CNAME (type 5) records
+//   - Authority section NS records tell us which server to ask next
+//   - Additional section gives us the IP of that server directly (glue)
+//
+// BUG 3 FIX (from Phase 1) still applies: this is non-static because it
+// needs the non-static readName/readUint16/readUint32 helpers.
 // ─────────────────────────────────────────────
-std::vector<std::string> DNSParser::parseResponse(const std::vector<uint8_t>& buffer) {
-    std::vector<std::string> ipAddresses;
+ParsedResponse DNSParser::parseResponse(const std::vector<uint8_t>& buffer) {
+    ParsedResponse result;
 
     if (buffer.size() < sizeof(DNSHeader)) {
         std::cerr << "❌ Response too short to contain a DNS header." << std::endl;
-        return ipAddresses;
+        return result;
     }
 
     // ── Read header ──
@@ -117,42 +123,98 @@ std::vector<std::string> DNSParser::parseResponse(const std::vector<uint8_t>& bu
     memcpy(&header, buffer.data(), sizeof(DNSHeader));
     offset += sizeof(DNSHeader);
 
-    uint16_t ancount = ntohs(header.ancount); // number of answer records
     uint16_t qdcount = ntohs(header.qdcount); // number of questions
+    uint16_t ancount = ntohs(header.ancount); // number of answer records
+    uint16_t nscount = ntohs(header.nscount); // number of authority (NS) records
+    uint16_t arcount = ntohs(header.arcount); // number of additional records
 
     // ── Skip Question section ──
-    // The response echoes back our question — we need to skip it
+    // The response echoes back our question — we need to skip past it
     for (int i = 0; i < qdcount; i++) {
         readName(buffer, offset); // skip QNAME
         offset += 4;              // skip QTYPE (2 bytes) + QCLASS (2 bytes)
     }
 
-    // ── Read Answer section ──
-    for (int i = 0; i < ancount; i++) {
-        readName(buffer, offset); // skip NAME (domain name, often a pointer)
+    // ── Helper lambda: reads ONE resource record and routes it based on TYPE ──
+    // Every record (Answer, Authority, Additional) shares this exact format:
+    //   NAME + TYPE + CLASS + TTL + RDLENGTH + RDATA
+    // 'section' tells us where this record came from so we know where to store it.
+    auto readRecord = [&](const std::string& section) {
+        std::string name = readName(buffer, offset); // record owner name
+
+        if (offset + 10 > buffer.size()) { // not enough bytes for TYPE+CLASS+TTL+RDLENGTH
+            offset = buffer.size();
+            return;
+        }
 
         uint16_t type     = readUint16(buffer, offset); // record type
         uint16_t rclass   = readUint16(buffer, offset); // class (always 1 = Internet)
-        uint32_t ttl      = readUint32(buffer, offset); // time-to-live (unused for now)
+        uint32_t ttl      = readUint32(buffer, offset); // time-to-live (used in Phase 5)
         uint16_t rdlength = readUint16(buffer, offset); // length of RDATA
 
         (void)rclass; // suppress unused variable warning
         (void)ttl;    // TTL will be used in Phase 5 for cache expiry
 
+        size_t rdataStart = offset; // remember where RDATA begins
+
         if (type == 1 && rdlength == 4) {
-            // ── A record — IPv4 address ──
-            // RDATA is exactly 4 bytes: one per octet of the IP address
+            // ── A record — IPv4 address (4 raw bytes, not name-encoded) ──
             if (offset + 4 <= buffer.size()) {
                 std::ostringstream ip;
                 ip << (int)buffer[offset]     << "."
                    << (int)buffer[offset + 1] << "."
                    << (int)buffer[offset + 2] << "."
                    << (int)buffer[offset + 3];
-                ipAddresses.push_back(ip.str());
+
+                if (section == "answer") {
+                    result.answers.push_back(ip.str());
+                } else if (section == "additional") {
+                    // Glue record: maps the nameserver hostname (the NAME field
+                    // of this record) to its IP address
+                    result.glue[name] = ip.str();
+                }
             }
         }
-        offset += rdlength; // skip past RDATA regardless of type
+        else if (type == 2) {
+            // ── NS record — RDATA is a domain-name-encoded nameserver hostname ──
+            // Only meaningful in the Authority section
+            size_t nsOffset = rdataStart; // readName needs its own offset cursor
+            std::string nsHost = readName(buffer, nsOffset);
+            if (section == "authority") {
+                result.nameservers.push_back(nsHost);
+            }
+        }
+        else if (type == 5) {
+            // ── CNAME record — RDATA is a domain-name-encoded canonical name ──
+            size_t cnOffset = rdataStart;
+            std::string canonical = readName(buffer, cnOffset);
+            if (section == "answer") {
+                result.cname = canonical; // we'll need to re-query with this name
+            }
+        }
+
+        // Always advance by rdlength regardless of type — this keeps the
+        // offset correct even for record types we don't explicitly handle
+        offset = rdataStart + rdlength;
+    };
+
+    // ── Read Answer section ──
+    for (int i = 0; i < ancount; i++) {
+        if (offset >= buffer.size()) break;
+        readRecord("answer");
     }
 
-    return ipAddresses;
+    // ── Read Authority section (NS records — who to ask next) ──
+    for (int i = 0; i < nscount; i++) {
+        if (offset >= buffer.size()) break;
+        readRecord("authority");
+    }
+
+    // ── Read Additional section (glue records — IPs of those nameservers) ──
+    for (int i = 0; i < arcount; i++) {
+        if (offset >= buffer.size()) break;
+        readRecord("additional");
+    }
+
+    return result;
 }
