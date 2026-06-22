@@ -41,17 +41,23 @@ int main() {
             continue;
         }
 
-        // BONUS FIX: was DNSParser::parseResponse(responseBuffer) — static call
-        // parseResponse is no longer static (Bug 3 fix), must use an object
+        // PHASE 2 CHANGE: parseResponse now returns ParsedResponse, not vector<string>
         DNSParser parser;
-        std::vector<std::string> ipAddresses = parser.parseResponse(responseBuffer);
+        ParsedResponse result = parser.parseResponse(responseBuffer);
 
-        if (!ipAddresses.empty()) {
+        if (result.hasAnswer()) {
             std::cout << "🌐 Resolved IPs:\n";
-            for (const std::string& ip : ipAddresses) {
+            for (const std::string& ip : result.answers) {
                 std::cout << "   → " << ip << std::endl;
             }
-            cache.insert(domain, ipAddresses[0]);
+            cache.insert(domain, result.answers[0]);
+        } else if (result.hasNameservers()) {
+            std::cout << "📡 Delegated to nameservers:\n";
+            for (const auto& ns : result.nameservers) {
+                std::cout << "   → " << ns;
+                if (result.glue.count(ns)) std::cout << " (glue: " << result.glue[ns] << ")";
+                std::cout << std::endl;
+            }
         } else {
             std::cerr << "⚠️  No IPs found for " << domain << std::endl;
         }
