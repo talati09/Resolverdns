@@ -5,13 +5,14 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include "dns_structs.h"
 
 class DNSParser {
 public:
-    // BUG 3 FIXED: was declared 'static' but internally creates a DNSParser
-    // object to call non-static methods (readName, readUint16, readUint32)
-    // — that is a contradiction. Removed 'static'.
-    std::vector<std::string> parseResponse(const std::vector<uint8_t>& buffer);
+    // PHASE 2 CHANGE: return type changed from vector<string> to ParsedResponse
+    // Now returns Answer, Authority (NS), and Additional (glue) sections —
+    // not just a flat list of IPs. This is needed for iterative resolution.
+    ParsedResponse parseResponse(const std::vector<uint8_t>& buffer);
 
 private:
     std::string readName(const std::vector<uint8_t>& buffer, size_t& offset);

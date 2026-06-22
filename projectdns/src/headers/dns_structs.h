@@ -3,6 +3,9 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
+#include <map>
 
 #define DNS_BUFFER_SIZE 512
 
@@ -19,5 +22,30 @@ struct DNSHeader {
     uint16_t arcount;  // Number of additional records
 };
 #pragma pack(pop)
+
+// ─────────────────────────────────────────────
+// PHASE 2 ADDITION
+// ParsedResponse holds the full picture of a DNS response —
+// not just the final answer, but also which nameservers to ask
+// next (for iterative resolution in Phase 4) and their glue IPs.
+// ─────────────────────────────────────────────
+struct ParsedResponse {
+    // Answer section — final IPs if the server had a direct answer
+    std::vector<std::string> answers;
+
+    // Authority section — NS records: hostnames of nameservers to ask next
+    std::vector<std::string> nameservers;
+
+    // Additional section — glue records: nameserver hostname -> its IP
+    // (saves us a separate lookup to resolve the nameserver's own IP)
+    std::map<std::string, std::string> glue;
+
+    // CNAME chain — if the domain was an alias, the canonical name to re-query
+    std::string cname;
+
+    bool hasAnswer() const { return !answers.empty(); }
+    bool hasNameservers() const { return !nameservers.empty(); }
+    bool hasCname() const { return !cname.empty(); }
+};
 
 #endif // DNS_STRUCTS_H
